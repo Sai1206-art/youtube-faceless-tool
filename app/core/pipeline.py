@@ -135,34 +135,42 @@ class Pipeline:
             # ═══════════════════════════════════════════════════════
             # STEP 5: Upload to Google Drive
             # ═══════════════════════════════════════════════════════
-            if upload_to_drive:
+            if upload_to_drive and os.getenv("ENABLE_DRIVE_UPLOAD", "false").lower() == "true":
                 print(f"[{job_id}] Step 5: Uploading to Google Drive...")
-                drive = DriveUploader()
-                drive_result = drive.upload_video(
-                    file_path=final_video_path,
-                    title=f"{script['title']}.mp4",
-                )
-                result["drive"] = drive_result
-                result["steps_completed"].append("drive_upload")
-                print(f"[{job_id}] ✓ Uploaded to Drive: {drive_result['web_view_link']}")
+                try:
+                    drive = DriveUploader()
+                    drive_result = drive.upload_video(
+                        file_path=final_video_path,
+                        title=f"{script['title']}.mp4",
+                    )
+                    result["drive"] = drive_result
+                    result["steps_completed"].append("drive_upload")
+                    print(f"[{job_id}] ✓ Uploaded to Drive: {drive_result['web_view_link']}")
+                except Exception as e:
+                    print(f"[{job_id}] ⚠️ Drive upload skipped: {e}")
+                    result["drive"] = {"error": str(e)}
 
             # ═══════════════════════════════════════════════════════
             # STEP 6: Upload to YouTube (as private/draft)
             # ═══════════════════════════════════════════════════════
-            if upload_to_youtube:
+            if upload_to_youtube and os.getenv("ENABLE_YOUTUBE_UPLOAD", "false").lower() == "true":
                 print(f"[{job_id}] Step 6: Uploading to YouTube as private...")
-                yt = YouTubeUploader()
-                yt_result = yt.upload_video(
-                    file_path=final_video_path,
-                    title=script["title"],
-                    description=script["description"],
-                    tags=script.get("tags", []),
-                    category=script.get("category", "Science & Technology"),
-                    privacy_status="private",
-                )
-                result["youtube"] = yt_result
-                result["steps_completed"].append("youtube_upload")
-                print(f"[{job_id}] ✓ Uploaded to YouTube (private): {yt_result['video_url']}")
+                try:
+                    yt = YouTubeUploader()
+                    yt_result = yt.upload_video(
+                        file_path=final_video_path,
+                        title=script["title"],
+                        description=script["description"],
+                        tags=script.get("tags", []),
+                        category=script.get("category", "Science & Technology"),
+                        privacy_status="private",
+                    )
+                    result["youtube"] = yt_result
+                    result["steps_completed"].append("youtube_upload")
+                    print(f"[{job_id}] ✓ Uploaded to YouTube (private): {yt_result['video_url']}")
+                except Exception as e:
+                    print(f"[{job_id}] ⚠️ YouTube upload skipped: {e}")
+                    result["youtube"] = {"error": str(e)}
 
             # ═══════════════════════════════════════════════════════
             # DONE
