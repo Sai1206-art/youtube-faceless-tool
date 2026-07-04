@@ -2,6 +2,7 @@
 fastapi==0.115.6
 uvicorn==0.34.0
 python-multipart==0.0.20
+jinja2>=3.1.0
 
 # LLM
 openai==1.59.6
@@ -9,9 +10,8 @@ openai==1.59.6
 # TTS
 elevenlabs==1.50.3
 pydub==0.25.1
-audioop-lts==0.2.1
 
-# Video Composition — imageio-ffmpeg bundles its own ffmpeg binary
+# Video Composition — imageio-ffmpeg bundles its own ffmpeg binary (fallback)
 moviepy==2.1.2
 imageio-ffmpeg==0.5.1
 Pillow>=9.2.0,<11.0
