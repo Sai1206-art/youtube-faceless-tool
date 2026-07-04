@@ -1,0 +1,20 @@
+# Environment
+.env
+google-credentials.json
+youtube-oauth-client.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Temp & Output
+temp/
+output/
+music/
+
+# OS
+.DS_Store
+Thumbs.db
