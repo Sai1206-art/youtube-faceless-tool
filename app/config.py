@@ -52,7 +52,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 MAX_VIDEO_DURATION = 120  # 2 minutes in seconds
 TARGET_DURATION = 90      # aim for 90s, max 120s
 FPS = 30
-RESOLUTION = (1920, 1080)  # Full HD
+RESOLUTION = (1280, 720)  # HD (optimized to prevent memory OOM crashes on Render Free Tier)
 
 # ─── TTS Settings ──────────────────────────────────────────
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")  # "Adam"
