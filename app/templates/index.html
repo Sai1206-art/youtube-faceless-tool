@@ -260,7 +260,7 @@
                 { name: 'Script Generation (GPT-4o)', key: 'script_generation' },
                 { name: 'Voiceover (ElevenLabs)', key: 'tts' },
                 { name: 'Stock Footage (Pexels)', key: 'stock_footage' },
-                { name: 'Video Composition (MoviePy)', key: 'video_composition' },
+                { name: 'Video Composition (FFmpeg)', key: 'video_composition' },
                 { name: 'Google Drive Upload', key: 'drive_upload' },
                 { name: 'YouTube Upload (Private)', key: 'youtube_upload' },
             ];
@@ -276,35 +276,90 @@
             ).join('');
 
             try {
+                // Submit the task to start in the background
                 const response = await fetch('/api/generate', { method: 'POST', body: formData });
-                const data = await response.json();
-
-                // Update step statuses
-                for (let s of steps) {
-                    const icon = document.getElementById(`icon-${s.key}`);
-                    const status = document.getElementById(`status-${s.key}`);
-                    if (data.steps_completed && data.steps_completed.includes(s.key)) {
-                        icon.className = 'step-icon done';
-                        icon.textContent = '✓';
-                        status.textContent = 'Complete';
-                    }
+                const initData = await response.json();
+                
+                if (!initData.job_id) {
+                    alert('Failed to start generation: ' + (initData.error || 'Unknown error'));
+                    btn.disabled = false;
+                    btn.textContent = 'Generate Video';
+                    return;
                 }
 
-                if (data.status === 'completed') {
-                    showResult(data);
-                } else {
-                    // Show error
-                    const errorStep = steps.find(s => !data.steps_completed.includes(s.key));
-                    if (errorStep) {
-                        const icon = document.getElementById(`icon-${errorStep.key}`);
-                        icon.className = 'step-error';
-                        icon.textContent = '✗';
+                const jobId = initData.job_id;
+                console.log("Background generation started! Job ID:", jobId);
+
+                // Start polling status
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const res = await fetch(`/api/status/${jobId}`);
+                        if (!res.ok) return;
+                        const data = await res.json();
+
+                        // 1. Update each step's icon/status
+                        steps.forEach(s => {
+                            const icon = document.getElementById(`icon-${s.key}`);
+                            const status = document.getElementById(`status-${s.key}`);
+
+                            if (data.steps_completed && data.steps_completed.includes(s.key)) {
+                                // Step is completed
+                                icon.className = 'step-icon done';
+                                icon.textContent = '✓';
+                                status.textContent = 'Complete';
+                            } else if (data.current_step === s.key) {
+                                if (data.step_status === 'running') {
+                                    // Step is currently active
+                                    icon.className = 'step-icon active';
+                                    icon.textContent = '●';
+                                    status.textContent = 'In Progress...';
+                                } else if (data.step_status === 'error') {
+                                    // Step failed with error
+                                    icon.className = 'step-icon error';
+                                    icon.textContent = '✗';
+                                    status.textContent = 'Failed';
+                                }
+                            } else {
+                                // Step is pending
+                                icon.className = 'step-icon';
+                                icon.textContent = '○';
+                                status.textContent = 'Pending';
+                            }
+                        });
+
+                        // 2. Check overall job status
+                        if (data.status === 'completed') {
+                            clearInterval(pollInterval);
+                            showResult(data);
+                            btn.disabled = false;
+                            btn.textContent = 'Generate Video';
+                        } else if (data.status === 'error') {
+                            clearInterval(pollInterval);
+                            
+                            // Mark the current active step as failed
+                            if (data.current_step) {
+                                const icon = document.getElementById(`icon-${data.current_step}`);
+                                if (icon) {
+                                    icon.className = 'step-icon error';
+                                    icon.textContent = '✗';
+                                }
+                                const status = document.getElementById(`status-${data.current_step}`);
+                                if (status) {
+                                    status.textContent = 'Failed';
+                                }
+                            }
+                            
+                            alert('Pipeline failed: ' + (data.error || 'Unknown error'));
+                            btn.disabled = false;
+                            btn.textContent = 'Generate Video';
+                        }
+                    } catch (pollErr) {
+                        console.error("Error polling job status:", pollErr);
                     }
-                    alert('Pipeline failed: ' + (data.error || 'Unknown error'));
-                }
+                }, 2000);
+
             } catch (err) {
                 alert('Request failed: ' + err.message);
-            } finally {
                 btn.disabled = false;
                 btn.textContent = 'Generate Video';
             }
