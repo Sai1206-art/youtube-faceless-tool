@@ -1,0 +1,30 @@
+# Web Framework
+fastapi==0.115.6
+uvicorn==0.34.0
+python-multipart==0.0.20
+
+# LLM
+openai==1.59.6
+
+# TTS
+elevenlabs==1.50.3
+pydub==0.25.1
+
+# Video Composition
+moviepy==2.1.2
+Pillow>=9.2.0,<11.0
+numpy>=1.26.0
+
+# Video frame extraction (for reference video analysis)
+opencv-python-headless==4.10.0.84
+
+# Stock Footage
+requests==2.32.3
+
+# Google APIs
+google-api-python-client==2.159.0
+google-auth==2.37.0
+google-auth-oauthlib==1.2.1
+
+# Environment
+python-dotenv==1.0.1
