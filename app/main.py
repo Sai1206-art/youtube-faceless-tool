@@ -5,17 +5,18 @@ Endpoints:
   GET  /            → Web UI
   POST /api/generate → Run the pipeline (multipart form upload)
   GET  /api/health   → Health check
+  GET  /api/download/{filename} → Download a generated video
 """
 
 import os
 import uuid
 import shutil
 from fastapi import FastAPI, File, UploadFile, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.config import TEMP_DIR, TEMPLATES_DIR, STATIC_DIR
+from app.config import TEMP_DIR, OUTPUT_DIR, TEMPLATES_DIR, STATIC_DIR
 from app.core.pipeline import Pipeline
 
 app = FastAPI(title="Faceless Tech Video Generator", version="1.0.0")
@@ -43,21 +44,12 @@ async def generate_video(
     product_images: list[UploadFile] = File(...),
     affiliate_link: str = Form(""),
     extra_context: str = Form(""),
-    upload_drive: bool = Form(True),
-    upload_youtube: bool = Form(True),
     reference_video: UploadFile = File(None),
 ):
     """
     Run the full video generation pipeline.
-
-    Accepts multipart form data with:
-    - prompt (required): text description of desired video
-    - product_images (required): one or more product photos
-    - affiliate_link (optional): URL to include in YouTube description
-    - extra_context (optional): additional text context
-    - upload_drive (optional): whether to upload to Drive
-    - upload_youtube (optional): YouTube upload
-    - reference_video (optional): reference video file
+    Drive and YouTube uploads are controlled by environment variables
+    ENABLE_DRIVE_UPLOAD and ENABLE_YOUTUBE_UPLOAD.
     """
     # ─── Save uploaded files to temp ──────────────────────
     job_id = f"upload_{uuid.uuid4().hex[:8]}"
@@ -89,14 +81,32 @@ async def generate_video(
         affiliate_link=affiliate_link or None,
         reference_video_path=ref_video_path,
         extra_context=extra_context or None,
-        upload_to_drive=upload_drive,
-        upload_to_youtube=upload_youtube,
+        upload_to_drive=False,  # Controlled by env var inside pipeline
+        upload_to_youtube=False, # Controlled by env var inside pipeline
     )
+
+    # ─── Add download link to result ──────────────────────
+    if result.get("video_path"):
+        filename = os.path.basename(result["video_path"])
+        result["download_url"] = f"/api/download/{filename}"
 
     # ─── Cleanup uploaded files ───────────────────────────
     shutil.rmtree(upload_dir, ignore_errors=True)
 
     return JSONResponse(content=result)
+
+
+@app.get("/api/download/{filename}")
+async def download_video(filename: str):
+    """Download a generated video file."""
+    file_path = os.path.join(OUTPUT_DIR, filename)
+    if not os.path.exists(file_path):
+        return JSONResponse(content={"error": "File not found"}, status_code=404)
+    return FileResponse(
+        file_path,
+        media_type="video/mp4",
+        filename=filename,
+    )
 
 
 if __name__ == "__main__":
