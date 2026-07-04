@@ -4,16 +4,23 @@ Load from environment variables / .env file.
 """
 
 import os
-import imageio_ffmpeg
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ─── FFmpeg binary path ────────────────────────────────────
-# imageio-ffmpeg bundles its own ffmpeg; point pydub/moviepy to it
-FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
-os.environ["FFMPEG_BINARY"] = FFMPEG_BINARY
-os.environ["IMAGEIO_FFMPEG_EXE"] = FFMPEG_BINARY
+# ─── FFmpeg binary path (set lazily) ───────────────────────
+# imageio-ffmpeg bundles its own ffmpeg binary. We set the path
+# lazily to avoid downloading during startup.
+FFMPEG_BINARY = ""
+def _setup_ffmpeg():
+    global FFMPEG_BINARY
+    try:
+        import imageio_ffmpeg
+        FFMPEG_BINARY = imageio_ffmpeg.get_ffmpeg_exe()
+        os.environ["FFMPEG_BINARY"] = FFMPEG_BINARY
+        os.environ["IMAGEIO_FFMPEG_EXE"] = FFMPEG_BINARY
+    except Exception as e:
+        print(f"⚠️ Could not setup ffmpeg: {e}")
 
 # ─── API Keys ──────────────────────────────────────────────
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
