@@ -72,43 +72,26 @@ class VideoComposer:
         return path
 
     def _make_product_clip(self, image_path: str, duration: float) -> ImageClip:
-        """Create a Ken Burns effect clip from a product photo (slow pan + zoom)."""
-        # Load and resize image to fit frame, maintaining aspect ratio
+        """Create a static image clip resized to fit the frame, with no dynamic zoom to save memory on Render Free Tier."""
+        import uuid
         img = Image.open(image_path).convert("RGB")
         img_w, img_h = img.size
 
-        # Resize so image covers the full frame
-        scale = max(self.width / img_w, self.height / img_h)
+        # Resize so image covers the full frame or fits the frame
+        scale = min(self.width / img_w, self.height / img_h)
         new_w, new_h = int(img_w * scale), int(img_h * scale)
         img = img.resize((new_w, new_h), Image.LANCZOS)
-        img.save(os.path.join(TEMP_DIR, "_kb_temp.png"))
 
-        # Ken Burns: subtle zoom + pan using VideoClip
-        from moviepy import VideoClip
-        zoom_factor = 1.08
+        # Create a background color clip and paste the image on it
+        bg = Image.new("RGB", (self.width, self.height), (15, 15, 25))
+        paste_x = (self.width - new_w) // 2
+        paste_y = (self.height - new_h) // 2
+        bg.paste(img, (paste_x, paste_y))
 
-        def make_frame(t):
-            progress = t / duration if duration > 0 else 0
-            current_zoom = 1 + (zoom_factor - 1) * progress
-            # Pan from left-center to center
-            pan_x = (new_w * current_zoom - self.width) * (0.5 - 0.3 * (1 - progress))
-            pan_y = (new_h * current_zoom - self.height) / 2
+        temp_path = os.path.join(TEMP_DIR, f"temp_prod_{uuid.uuid4().hex[:8]}.png")
+        bg.save(temp_path)
 
-            frame = np.array(img)
-            # Crop based on zoom
-            crop_w = int(self.width / current_zoom)
-            crop_h = int(self.height / current_zoom)
-            x_start = int(pan_x) if pan_x > 0 else 0
-            y_start = int(pan_y) if pan_y > 0 else 0
-            x_start = min(x_start, new_w - crop_w)
-            y_start = min(y_start, new_h - crop_h)
-
-            cropped = frame[y_start:y_start + crop_h, x_start:x_start + crop_w]
-            # Resize back to full resolution
-            pil = Image.fromarray(cropped).resize((self.width, self.height), Image.LANCZOS)
-            return np.array(pil)
-
-        clip = VideoClip(frame_function=make_frame, duration=duration).with_fps(FPS)
+        clip = ImageClip(temp_path, duration=duration).with_fps(FPS)
         return clip
 
     def _make_stock_clip(self, video_path: str, duration: float) -> VideoFileClip:
@@ -224,8 +207,8 @@ class VideoComposer:
             fps=FPS,
             codec="libx264",
             audio_codec="aac",
-            preset="medium",
-            threads=4,
+            preset="veryfast",
+            threads=1,
             logger=None,
         )
 
