@@ -91,6 +91,8 @@ async def generate_video(
     Run the full video generation pipeline.
     """
     # Lazy import to avoid loading everything at startup
+    from app.config import _setup_ffmpeg
+    _setup_ffmpeg()  # Download/setup ffmpeg only when needed
     from app.core.pipeline import Pipeline
     from app.config import TEMP_DIR, OUTPUT_DIR
 
