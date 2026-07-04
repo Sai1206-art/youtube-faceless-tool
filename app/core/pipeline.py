@@ -19,8 +19,6 @@ from app.core.script_generator import ScriptGenerator
 from app.core.tts_engine import TTSEngine
 from app.core.stock_footage import StockFootageFetcher
 from app.core.video_composer import VideoComposer
-from app.core.drive_uploader import DriveUploader
-from app.core.youtube_uploader import YouTubeUploader
 
 
 class Pipeline:
@@ -138,6 +136,7 @@ class Pipeline:
             if upload_to_drive and os.getenv("ENABLE_DRIVE_UPLOAD", "false").lower() == "true":
                 print(f"[{job_id}] Step 5: Uploading to Google Drive...")
                 try:
+                    from app.core.drive_uploader import DriveUploader
                     drive = DriveUploader()
                     drive_result = drive.upload_video(
                         file_path=final_video_path,
@@ -156,6 +155,7 @@ class Pipeline:
             if upload_to_youtube and os.getenv("ENABLE_YOUTUBE_UPLOAD", "false").lower() == "true":
                 print(f"[{job_id}] Step 6: Uploading to YouTube as private...")
                 try:
+                    from app.core.youtube_uploader import YouTubeUploader
                     yt = YouTubeUploader()
                     yt_result = yt.upload_video(
                         file_path=final_video_path,
