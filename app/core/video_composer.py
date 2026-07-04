@@ -83,10 +83,10 @@ class VideoComposer:
         img = img.resize((new_w, new_h), Image.LANCZOS)
         img.save(os.path.join(TEMP_DIR, "_kb_temp.png"))
 
-        clip = ImageClip(os.path.join(TEMP_DIR, "_kb_temp.png"), duration=duration)
-
-        # Ken Burns: subtle zoom + pan
+        # Ken Burns: subtle zoom + pan using VideoClip
+        from moviepy import VideoClip
         zoom_factor = 1.08
+
         def make_frame(t):
             progress = t / duration if duration > 0 else 0
             current_zoom = 1 + (zoom_factor - 1) * progress
@@ -108,7 +108,7 @@ class VideoComposer:
             pil = Image.fromarray(cropped).resize((self.width, self.height), Image.LANCZOS)
             return np.array(pil)
 
-        clip = ImageClip(make_frame=make_frame, duration=duration).with_fps(FPS)
+        clip = VideoClip(make_frame=make_frame, duration=duration).with_fps(FPS)
         return clip
 
     def _make_stock_clip(self, video_path: str, duration: float) -> VideoFileClip:
@@ -124,7 +124,7 @@ class VideoComposer:
 
     def _make_fallback_clip(self, duration: float, color=(15, 15, 25)) -> ColorClip:
         """Solid color background clip (fallback when no visuals available)."""
-        return ColorClip(size=(self.width, self.height), color=color, duration=duration)
+        return ColorClip(size=(self.width, self.height), color=color, duration=duration).with_fps(FPS)
 
     def _get_background_music(self, scene_durations: list[float]) -> Optional[str]:
         """Locate a royalty-free music file from the music/ directory."""
