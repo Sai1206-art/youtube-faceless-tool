@@ -8,7 +8,9 @@ Output: Structured JSON with scene-by-scene breakdown.
 import json
 import base64
 import os
+import io
 from typing import Optional
+from PIL import Image
 from openai import OpenAI
 
 from app.config import (
@@ -31,27 +33,29 @@ class ScriptGenerator:
         Extract key frames from the reference video and encode to base64.
         We sample frames at evenly-spaced intervals to give GPT-4o a sense
         of the video's visual style/pacing.
+        Uses MoviePy instead of OpenCV for fewer dependencies.
         """
-        import cv2
+        from moviepy import VideoFileClip
 
-        cap = cv2.VideoCapture(video_path)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if total_frames == 0:
-            cap.release()
+        clip = VideoFileClip(video_path)
+        duration = clip.duration
+        if duration <= 0:
+            clip.close()
             return []
 
-        # Sample evenly-spaced frames
-        step = max(total_frames // max_frames, 1)
+        # Sample evenly-spaced timestamps
+        timestamps = [duration * (i + 1) / (max_frames + 1) for i in range(max_frames)]
         frames = []
-        for i in range(0, total_frames, step):
-            if len(frames) >= max_frames:
-                break
-            cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-            ret, frame = cap.read()
-            if ret:
-                _, buffer = cv2.imencode(".jpg", frame)
-                frames.append(base64.b64encode(buffer).decode("utf-8"))
-        cap.release()
+        for ts in timestamps:
+            try:
+                frame = clip.get_frame(ts)
+                pil_img = Image.fromarray(frame)
+                buf = io.BytesIO()
+                pil_img.save(buf, format="JPEG", quality=85)
+                frames.append(base64.b64encode(buf.getvalue()).decode("utf-8"))
+            except Exception:
+                pass
+        clip.close()
         return frames
 
     def generate_script(
