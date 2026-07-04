@@ -155,7 +155,7 @@
                 <textarea id="extra-context" placeholder="Any additional info: target audience, tone preference, specific features to highlight, etc." style="min-height: 60px;"></textarea>
             </div>
 
-            <div class="toggle-row">
+            <div class="toggle-row" style="display: none;">
                 <label class="toggle">
                     <input type="checkbox" id="upload-drive" checked>
                     Upload to Drive
@@ -324,6 +324,12 @@
             if (data.voiceover) {
                 html += `<div style="margin-bottom: 16px;">
                     <strong>Duration:</strong> ${data.voiceover.duration}s
+                </div>`;
+            }
+            if (data.video_path || data.download_url) {
+                html += `<div style="margin-bottom: 16px;">
+                    <strong>Download Video:</strong><br>
+                    <a href="${data.download_url}" target="_blank" class="result-link">⬇ Download MP4</a>
                 </div>`;
             }
             if (data.drive) {
