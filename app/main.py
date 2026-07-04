@@ -3,7 +3,8 @@ FastAPI Server — Web interface for the Faceless Tech Video Generator.
 
 Endpoints:
   GET  /            → Web UI
-  POST /api/generate → Run the pipeline (multipart form upload)
+  POST /api/generate → Run the pipeline in background (returns immediately)
+  GET  /api/status/{job_id} → Get the real-time progress/status of a job
   GET  /api/health   → Health check
   GET  /api/download/{filename} → Download a generated video
 """
@@ -12,12 +13,17 @@ import os
 import sys
 import uuid
 import shutil
+import threading
+from typing import Optional
 from fastapi import FastAPI, File, UploadFile, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="Faceless Tech Video Generator", version="1.0.0")
+
+# Global in-memory storage for jobs and their progress
+jobs_db = {}
 
 # Lazy load templates and config to catch import errors
 try:
@@ -38,6 +44,60 @@ except Exception as e:
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
+def run_pipeline_in_background(
+    job_id: str,
+    prompt: str,
+    image_paths: list[str],
+    affiliate_link: Optional[str],
+    ref_video_path: Optional[str],
+    extra_context: Optional[str],
+    upload_dir: str,
+):
+    """Worker function running the pipeline in a background thread."""
+    from app.core.pipeline import Pipeline
+
+    # Define progress callback to sync background updates into jobs_db
+    def progress_callback(jid, step, status, res):
+        if jid not in jobs_db:
+            jobs_db[jid] = {}
+
+        jobs_db[jid]["current_step"] = step
+        jobs_db[jid]["step_status"] = status
+
+        # Sync result fields
+        for key in ["status", "steps_completed", "script", "voiceover", "video_path", "drive", "youtube", "error"]:
+            if key in res:
+                jobs_db[jid][key] = res[key]
+
+        # Generate download URL if video composed
+        if res.get("video_path") and not jobs_db[jid].get("download_url"):
+            filename = os.path.basename(res["video_path"])
+            jobs_db[jid]["download_url"] = f"/api/download/{filename}"
+
+    try:
+        pipeline = Pipeline()
+        pipeline.run(
+            prompt=prompt,
+            product_images=image_paths,
+            affiliate_link=affiliate_link,
+            reference_video_path=ref_video_path,
+            extra_context=extra_context,
+            upload_to_drive=False,
+            upload_to_youtube=False,
+            job_id=job_id,
+            progress_callback=progress_callback,
+        )
+    except Exception as e:
+        print(f"[{job_id}] Pipeline exception in background thread: {e}")
+        if job_id not in jobs_db:
+            jobs_db[job_id] = {}
+        jobs_db[job_id]["status"] = "error"
+        jobs_db[job_id]["error"] = str(e)
+    finally:
+        # Cleanup uploaded files directory
+        shutil.rmtree(upload_dir, ignore_errors=True)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Serve the main web UI."""
@@ -56,8 +116,9 @@ async def debug():
     results = {
         "python": sys.version,
         "platform": platform.platform(),
+        "active_jobs_count": len(jobs_db),
     }
-    
+
     # Check imports
     checks = {}
     for mod in ["fastapi", "uvicorn", "openai", "elevenlabs", "pydub", "moviepy", "imageio_ffmpeg", "PIL", "numpy", "requests", "dotenv"]:
@@ -67,7 +128,7 @@ async def debug():
         except Exception as e:
             checks[mod] = f"❌ {e}"
     results["imports"] = checks
-    
+
     # Check env vars
     results["env"] = {
         "OPENAI_API_KEY": "set" if os.getenv("OPENAI_API_KEY") else "missing",
@@ -75,7 +136,7 @@ async def debug():
         "PEXELS_API_KEY": "set" if os.getenv("PEXELS_API_KEY") else "missing",
         "PORT": os.getenv("PORT", "not set"),
     }
-    
+
     return results
 
 
@@ -88,17 +149,17 @@ async def generate_video(
     reference_video: UploadFile = File(None),
 ):
     """
-    Run the full video generation pipeline.
+    Start video generation in a background thread to prevent blocking.
     """
-    # Lazy import to avoid loading everything at startup
-    from app.config import _setup_ffmpeg
-    _setup_ffmpeg()  # Download/setup ffmpeg only when needed
-    from app.core.pipeline import Pipeline
-    from app.config import TEMP_DIR, OUTPUT_DIR
+    # Lazy import config and setup ffmpeg
+    from app.config import _setup_ffmpeg, TEMP_DIR
+    _setup_ffmpeg()
 
-    # ─── Save uploaded files to temp ──────────────────────
-    job_id = f"upload_{uuid.uuid4().hex[:8]}"
-    upload_dir = os.path.join(TEMP_DIR, job_id)
+    # Create a unique job_id
+    job_id = f"job_{uuid.uuid4().hex[:8]}"
+
+    # Save uploaded files to temp folder for the background thread
+    upload_dir = os.path.join(TEMP_DIR, f"upload_{job_id}")
     os.makedirs(upload_dir, exist_ok=True)
 
     image_paths = []
@@ -118,27 +179,45 @@ async def generate_video(
             content = await reference_video.read()
             f.write(content)
 
-    # ─── Run the pipeline ─────────────────────────────────
-    pipeline = Pipeline()
-    result = pipeline.run(
-        prompt=prompt,
-        product_images=image_paths,
-        affiliate_link=affiliate_link or None,
-        reference_video_path=ref_video_path,
-        extra_context=extra_context or None,
-        upload_to_drive=False,
-        upload_to_youtube=False,
+    # Initialize state in global jobs_db
+    jobs_db[job_id] = {
+        "job_id": job_id,
+        "status": "pending",
+        "current_step": "script_generation",
+        "step_status": "pending",
+        "steps_completed": [],
+    }
+
+    # Start the worker thread
+    t = threading.Thread(
+        target=run_pipeline_in_background,
+        kwargs={
+            "job_id": job_id,
+            "prompt": prompt,
+            "image_paths": image_paths,
+            "affiliate_link": affiliate_link or None,
+            "ref_video_path": ref_video_path,
+            "extra_context": extra_context or None,
+            "upload_dir": upload_dir,
+        }
     )
+    t.daemon = True
+    t.start()
 
-    # ─── Add download link to result ──────────────────────
-    if result.get("video_path"):
-        filename = os.path.basename(result["video_path"])
-        result["download_url"] = f"/api/download/{filename}"
+    # Return immediately to avoid blocking uvicorn or Render
+    return JSONResponse(content={
+        "job_id": job_id,
+        "status": "pending",
+        "message": "Generation started in the background"
+    })
 
-    # ─── Cleanup uploaded files ───────────────────────────
-    shutil.rmtree(upload_dir, ignore_errors=True)
 
-    return JSONResponse(content=result)
+@app.get("/api/status/{job_id}")
+async def get_job_status(job_id: str):
+    """Retrieve current progress of a background video generation job."""
+    if job_id not in jobs_db:
+        return JSONResponse(content={"error": "Job not found"}, status_code=404)
+    return JSONResponse(content=jobs_db[job_id])
 
 
 @app.get("/api/download/{filename}")
