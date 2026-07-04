@@ -108,7 +108,7 @@ class VideoComposer:
             pil = Image.fromarray(cropped).resize((self.width, self.height), Image.LANCZOS)
             return np.array(pil)
 
-        clip = VideoClip(make_frame=make_frame, duration=duration).with_fps(FPS)
+        clip = VideoClip(frame_function=make_frame, duration=duration).with_fps(FPS)
         return clip
 
     def _make_stock_clip(self, video_path: str, duration: float) -> VideoFileClip:
