@@ -108,7 +108,7 @@ class VideoComposer:
             pil = Image.fromarray(cropped).resize((self.width, self.height), Image.LANCZOS)
             return np.array(pil)
 
-        clip = ImageClip(make_frame=make_frame, duration=duration).set_fps(FPS)
+        clip = ImageClip(make_frame=make_frame, duration=duration).with_fps(FPS)
         return clip
 
     def _make_stock_clip(self, video_path: str, duration: float) -> VideoFileClip:
@@ -119,7 +119,7 @@ class VideoComposer:
             clip = clip.subclipped(0, duration)
         # Resize to fit frame
         clip = clip.resized((self.width, self.height))
-        clip = clip.set_fps(FPS)
+        clip = clip.with_fps(FPS)
         return clip
 
     def _make_fallback_clip(self, duration: float, color=(15, 15, 25)) -> ColorClip:
@@ -189,7 +189,7 @@ class VideoComposer:
 
             # ─── Combine visual + overlay ────────────────────
             scene_clip = CompositeVideoClip(overlays, size=(self.width, self.height))
-            scene_clip = scene_clip.set_fps(FPS)
+            scene_clip = scene_clip.with_fps(FPS)
             video_clips.append(scene_clip)
 
         # ─── Concatenate all scenes ──────────────────────────
@@ -208,7 +208,7 @@ class VideoComposer:
                 pass
             music = music.subclipped(0, final_video.duration)
             # Lower music volume (30%)
-            music = music.volumex(0.15)
+            music = music.with_volume_scaled(0.15)
             # Mix voiceover + music
             mixed_audio = CompositeAudioClip([voiceover, music])
             final_video = final_video.with_audio(mixed_audio)
