@@ -30,19 +30,25 @@ class StockFootageFetcher:
         return data.get("videos", [])
 
     def _pick_best_video(self, videos: list[dict]) -> Optional[dict]:
-        """Pick the best video file from search results — prefer HD, reasonable duration."""
+        """Pick the best video file from search results — prefer HD (720p/1080p), reasonable duration."""
         if not videos:
             return None
-        # Pick first video that has an HD file
+        # Prefer 1280x720 or 1920x1080 (saves memory compared to 4K)
         for video in videos:
             for video_file in video.get("video_files", []):
-                if video_file.get("width", 0) >= 1920 and video_file.get("height", 0) >= 1080:
+                w = video_file.get("width", 0)
+                h = video_file.get("height", 0)
+                if 1280 <= w <= 1920 and 720 <= h <= 1080:
                     return video_file
-        # Fallback: any file
+        # Fallback to any HD file
         for video in videos:
             for video_file in video.get("video_files", []):
                 if video_file.get("quality") == "hd":
                     return video_file
+        # Second fallback: any file
+        for video in videos:
+            for video_file in video.get("video_files", []):
+                return video_file
         return None
 
     def download_video(self, url: str, output_path: str) -> str:
