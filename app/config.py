@@ -14,14 +14,19 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 
 # ─── Google Credentials ────────────────────────────────────
-# Path to your service account JSON (for Drive + YouTube)
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON", "google-credentials.json")
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
 
 # ─── Paths ─────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMP_DIR = os.path.join(BASE_DIR, "temp")
-OUTPUT_DIR = os.path.join(os.path.dirname(BASE_DIR), "output")
+# On Render/Docker, use /app/temp and /app/output
+if os.path.exists("/app/temp"):
+    TEMP_DIR = "/app/temp"
+    OUTPUT_DIR = "/app/output"
+else:
+    TEMP_DIR = os.path.join(BASE_DIR, "temp")
+    OUTPUT_DIR = os.path.join(os.path.dirname(BASE_DIR), "output")
+
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
@@ -36,7 +41,7 @@ FPS = 30
 RESOLUTION = (1920, 1080)  # Full HD
 
 # ─── TTS Settings ──────────────────────────────────────────
-ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")  # "Adam" — professional male
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")  # "Adam"
 TTS_MODEL = "eleven_turbo_v2"
 TTS_VOICE_SETTINGS = {
     "stability": 0.5,
@@ -51,7 +56,11 @@ LLM_MAX_TOKENS = 4096
 LLM_TEMPERATURE = 0.7
 
 # ─── Drive Settings ────────────────────────────────────────
-DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "")  # Empty = upload to root
+DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "")
 
 # ─── Stock Footage ─────────────────────────────────────────
 PEXELS_PER_PAGE = 15
+
+# ─── Feature Flags ─────────────────────────────────────────
+ENABLE_DRIVE_UPLOAD = os.getenv("ENABLE_DRIVE_UPLOAD", "false").lower() == "true"
+ENABLE_YOUTUBE_UPLOAD = os.getenv("ENABLE_YOUTUBE_UPLOAD", "false").lower() == "true"
