@@ -19,10 +19,5 @@ numpy>=1.26.0
 # Stock Footage
 requests==2.32.3
 
-# Google APIs (for future Drive/YouTube upload)
-google-api-python-client==2.159.0
-google-auth==2.37.0
-google-auth-oauthlib==1.2.1
-
 # Environment
 python-dotenv==1.0.1
