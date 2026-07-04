@@ -9,6 +9,7 @@ openai==1.59.6
 # TTS
 elevenlabs==1.50.3
 pydub==0.25.1
+audioop-lts==0.2.1
 
 # Video Composition — imageio-ffmpeg bundles its own ffmpeg binary
 moviepy==2.1.2
