@@ -18,3 +18,7 @@ music/
 # OS
 .DS_Store
 Thumbs.db
+
+# Large local media
+input/
+scripts/__pycache__/
