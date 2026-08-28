@@ -72,8 +72,14 @@ LLM_TEMPERATURE = 0.7
 # ─── Drive Settings ────────────────────────────────────────
 DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "")
 
-# ─── Stock Footage ─────────────────────────────────────────
+# ─── Stock Footage / B-roll ────────────────────────────────
 PEXELS_PER_PAGE = 15
+# When enabled, scenes that have no usable product image fall back to
+# relevant B-roll footage instead of a plain solid-color background.
+ENABLE_BROLL = os.getenv("ENABLE_BROLL", "true").lower() == "true"
+# Orientation is derived from the target resolution so B-roll matches the
+# video's aspect ratio (portrait for Shorts, landscape otherwise).
+BROLL_ORIENTATION = "portrait" if RESOLUTION[1] > RESOLUTION[0] else "landscape"
 
 # ─── Feature Flags ─────────────────────────────────────────
 ENABLE_DRIVE_UPLOAD = os.getenv("ENABLE_DRIVE_UPLOAD", "false").lower() == "true"

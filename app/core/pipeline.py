@@ -14,7 +14,7 @@ import shutil
 import traceback
 from typing import Optional
 
-from app.config import TEMP_DIR, OUTPUT_DIR
+from app.config import TEMP_DIR, OUTPUT_DIR, ENABLE_BROLL
 from app.core.script_generator import ScriptGenerator
 from app.core.tts_engine import TTSEngine
 from app.core.stock_footage import StockFootageFetcher
@@ -104,29 +104,44 @@ class Pipeline:
             # ═══════════════════════════════════════════════════════
             # STEP 3: Fetch Stock Footage
             # ═══════════════════════════════════════════════════════
-            print(f"[{job_id}] Step 3: Fetching stock footage...")
+            print(f"[{job_id}] Step 3: Fetching stock footage (B-roll)...")
             report_progress("stock_footage", "running")
+            # Video-level keywords used as a last-resort B-roll query so a scene
+            # with a vague visual description still gets topical footage.
+            broll_keywords = " ".join(
+                str(script.get("title", "")).split()[:4]
+            ) or prompt
             scene_assets = []
             for i, scene in enumerate(script["scenes"]):
                 asset = {"type": "fallback", "path": None}
-                if scene.get("image_source") == "product":
+                image_source = scene.get("image_source")
+
+                if image_source == "product":
                     img_idx = scene.get("image_index", 0)
                     if img_idx is not None and 0 <= img_idx < len(product_images):
                         asset = {"type": "product", "path": product_images[img_idx]}
-                elif scene.get("image_source") == "stock":
+
+                # Fetch B-roll for explicit "stock" scenes, and — when B-roll is
+                # enabled — for any scene that didn't resolve to a product image,
+                # so we avoid empty solid-color segments.
+                if asset["type"] == "fallback" and (
+                    image_source == "stock" or ENABLE_BROLL
+                ):
                     path = self.stock.fetch_for_scene(
                         visual_description=scene.get("visual_description", ""),
                         scene_number=i,
                         output_dir=job_temp,
                         job_id=job_id,
+                        extra_keywords=broll_keywords,
                     )
                     if path:
                         asset = {"type": "stock", "path": path}
+
                 scene_assets.append(asset)
             result["steps_completed"].append("stock_footage")
             report_progress("stock_footage", "completed")
             stock_count = sum(1 for a in scene_assets if a["type"] == "stock")
-            print(f"[{job_id}] ✓ Stock footage fetched for {stock_count} scenes")
+            print(f"[{job_id}] ✓ B-roll footage fetched for {stock_count} scenes")
 
             # ═══════════════════════════════════════════════════════
             # STEP 4: Compose Video

@@ -144,10 +144,14 @@ class VideoComposer:
 
         vf = f"scale={self.width}:{self.height}:force_original_aspect_ratio=decrease,pad={self.width}:{self.height}:(ow-iw)/2:(oh-ih)/2:color=0x0f0f19"
 
+        # -stream_loop -1 loops the B-roll so a clip shorter than the scene
+        # still fills the full duration; -t then trims it to the scene length.
+        # This keeps every segment exactly its scene duration, so the final
+        # concatenation stays in sync with the voiceover.
         if overlay_path:
             cmd = [
                 ffmpeg, "-y",
-                "-i", video_path,
+                "-stream_loop", "-1", "-i", video_path,
                 "-i", overlay_path,
                 "-t", str(duration),
                 "-r", str(FPS),
@@ -161,7 +165,7 @@ class VideoComposer:
         else:
             cmd = [
                 ffmpeg, "-y",
-                "-i", video_path,
+                "-stream_loop", "-1", "-i", video_path,
                 "-t", str(duration),
                 "-r", str(FPS),
                 "-vf", vf,
