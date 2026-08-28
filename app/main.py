@@ -98,6 +98,49 @@ def run_pipeline_in_background(
         shutil.rmtree(upload_dir, ignore_errors=True)
 
 
+def run_broll_in_background(
+    job_id: str,
+    base_video_path: str,
+    extra_context: Optional[str],
+    upload_dir: str,
+):
+    """Worker thread: overlay Pexels B-roll onto an uploaded base video."""
+    from app.core.broll_integrator import BrollIntegrator
+
+    def progress_callback(jid, step, status, res):
+        if jid not in jobs_db:
+            jobs_db[jid] = {}
+        jobs_db[jid]["current_step"] = step
+        jobs_db[jid]["step_status"] = status
+        for key in ["status", "steps_completed", "video_info", "plan",
+                    "coverage_percent", "inserts_fetched", "transcript_segments",
+                    "video_path", "error"]:
+            if key in res:
+                jobs_db[jid][key] = res[key]
+        if res.get("video_path") and not jobs_db[jid].get("download_url"):
+            filename = os.path.basename(res["video_path"])
+            jobs_db[jid]["download_url"] = f"/api/download/{filename}"
+
+    try:
+        integrator = BrollIntegrator()
+        integrator.run(
+            base_video_path=base_video_path,
+            job_id=job_id,
+            extra_context=extra_context,
+            progress_callback=progress_callback,
+        )
+    except Exception as e:
+        import traceback
+        print(f"[{job_id}] B-roll exception in background thread: {e}")
+        traceback.print_exc()
+        if job_id not in jobs_db:
+            jobs_db[job_id] = {}
+        jobs_db[job_id]["status"] = "error"
+        jobs_db[job_id]["error"] = str(e)
+    finally:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Serve the main web UI."""
@@ -209,6 +252,58 @@ async def generate_video(
         "job_id": job_id,
         "status": "pending",
         "message": "Generation started in the background"
+    })
+
+
+@app.post("/api/broll")
+async def add_broll(
+    base_video: UploadFile = File(...),
+    extra_context: str = Form(""),
+):
+    """
+    Overlay relevant Pexels B-roll onto an uploaded base (talking-head) video.
+
+    Returns immediately with a job_id; poll /api/status/{job_id} for progress.
+    """
+    from app.config import _setup_ffmpeg, TEMP_DIR
+    _setup_ffmpeg()
+
+    if not base_video or not base_video.filename:
+        return JSONResponse(content={"error": "No base video provided"}, status_code=400)
+
+    job_id = f"broll_{uuid.uuid4().hex[:8]}"
+    upload_dir = os.path.join(TEMP_DIR, f"upload_{job_id}")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    ext = os.path.splitext(base_video.filename)[1] or ".mp4"
+    base_video_path = os.path.join(upload_dir, f"base{ext}")
+    with open(base_video_path, "wb") as f:
+        f.write(await base_video.read())
+
+    jobs_db[job_id] = {
+        "job_id": job_id,
+        "status": "pending",
+        "current_step": "probe",
+        "step_status": "pending",
+        "steps_completed": [],
+    }
+
+    t = threading.Thread(
+        target=run_broll_in_background,
+        kwargs={
+            "job_id": job_id,
+            "base_video_path": base_video_path,
+            "extra_context": extra_context or None,
+            "upload_dir": upload_dir,
+        },
+    )
+    t.daemon = True
+    t.start()
+
+    return JSONResponse(content={
+        "job_id": job_id,
+        "status": "pending",
+        "message": "B-roll integration started in the background",
     })
 
 

@@ -2,6 +2,33 @@
 
 Automated pipeline that generates faceless YouTube tech product videos from your prompt + product photos.
 
+## Two modes
+
+1. **Generate from scratch** — prompt + product photos → full faceless video (script → voiceover → stock footage → composed video).
+2. **Add B-roll to an existing video** — upload a talking-head / base video and the tool overlays relevant Pexels B-roll at maximum relevant spots, keeping the speaker on screen while B-roll rolls in a picture-in-picture inset (with occasional full-frame cutaways).
+
+## B-roll Integration
+
+Upload a base video on the web UI (top card, "Add B-roll to an existing video") or `POST /api/broll` with a `base_video` file.
+
+How it works:
+
+```
+Base video
+  → probe (dimensions / duration / audio)
+  → Whisper transcribes the speech with timestamps
+  → GPT-4o plans B-roll: which moments, what to search, how to lay it out
+  → Pexels clips fetched for each window (distinct clip per insert)
+  → FFmpeg bakes every clip onto the base video in one pass
+```
+
+- **Coverage:** aims to cover ~85% of the talking track so the video stays engaging "at max places". Tune with `BROLL_COVERAGE_TARGET`.
+- **Layout:** default is a large picture-in-picture inset in a rotating corner (`BROLL_PIP_SCALE`, `BROLL_PIP_MARGIN`), so the person stays visible with B-roll rolling. The planner uses full-frame cutaways when the speaker names a concrete object/place.
+- **Audio:** the original speaker audio is always preserved; B-roll audio is dropped.
+- **Graceful fallback:** if transcription or GPT-4o is unavailable, a heuristic planner still spreads B-roll across the timeline. If a clip can't be found or the render fails, you still get a valid video back.
+
+Only `OPENAI_API_KEY` (Whisper + GPT-4o planning) and `PEXELS_API_KEY` are needed for this mode — no ElevenLabs or Google credentials required.
+
 ## Workflow
 
 ```

@@ -75,6 +75,33 @@ DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "")
 # ─── Stock Footage ─────────────────────────────────────────
 PEXELS_PER_PAGE = 15
 
+# ─── B-roll Integration (overlay B-roll onto an existing base video) ──
+# Transcription model used to time-align the speaker's words so B-roll
+# can be placed at the right moments.
+WHISPER_MODEL = "whisper-1"
+# The planning LLM decides which words/phrases deserve B-roll and how to
+# lay it out over the speaker.
+BROLL_PLANNER_MODEL = "gpt-4o"
+# Minimum length (seconds) of a single B-roll insert. Shorter beats feel
+# glitchy; the planner merges anything shorter than this.
+BROLL_MIN_CLIP = 1.8
+# Maximum length (seconds) of a single B-roll insert before we force a cut
+# to a new clip — keeps long stretches visually fresh.
+BROLL_MAX_CLIP = 6.0
+# Target share of the talking track that should be covered by B-roll.
+# 0.85 = "at maximum places" as requested — nearly wall-to-wall B-roll.
+BROLL_COVERAGE_TARGET = 0.85
+# Default layout when the planner does not specify one. "pip_topright"
+# keeps the speaker on screen with B-roll rolling in a large inset.
+BROLL_DEFAULT_LAYOUT = "pip_topright"
+# Fraction of frame width the picture-in-picture inset occupies.
+BROLL_PIP_SCALE = 0.46
+# Margin (px) around the PiP inset.
+BROLL_PIP_MARGIN = 24
+# Hard cap on number of B-roll inserts in one video (bounds ffmpeg command
+# size and render time). Set generously so "max places" still applies.
+BROLL_MAX_INSERTS = 60
+
 # ─── Feature Flags ─────────────────────────────────────────
 ENABLE_DRIVE_UPLOAD = os.getenv("ENABLE_DRIVE_UPLOAD", "false").lower() == "true"
 ENABLE_YOUTUBE_UPLOAD = os.getenv("ENABLE_YOUTUBE_UPLOAD", "false").lower() == "true"

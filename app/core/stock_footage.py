@@ -16,13 +16,18 @@ class StockFootageFetcher:
         self.session.headers.update({"Authorization": PEXELS_API_KEY})
         self.base_url = "https://api.pexels.com/v1"
 
-    def search_video(self, query: str, per_page: int = PEXELS_PER_PAGE) -> list[dict]:
+    def search_video(
+        self,
+        query: str,
+        per_page: int = PEXELS_PER_PAGE,
+        orientation: str = "landscape",
+    ) -> list[dict]:
         """Search Pexels for videos matching the query."""
         url = f"{self.base_url}/videos/search"
         params = {
             "query": query,
             "per_page": per_page,
-            "orientation": "landscape",
+            "orientation": orientation,
         }
         resp = self.session.get(url, params=params)
         resp.raise_for_status()
@@ -89,4 +94,73 @@ class StockFootageFetcher:
                 continue
 
         # Final fallback: solid color clip (handled by video composer)
+        return None
+
+    def fetch_broll(
+        self,
+        query: str,
+        index: int,
+        output_dir: str = TEMP_DIR,
+        job_id: str = "job",
+        orientation: str = "landscape",
+        used_video_ids: Optional[set] = None,
+    ) -> Optional[dict]:
+        """
+        Fetch a single B-roll clip for an overlay insert.
+
+        Unlike ``fetch_for_scene`` this avoids re-using the same Pexels video
+        twice in one job (so consecutive inserts don't look identical) and
+        returns the source clip's own duration so the composer knows whether
+        it must loop the clip to fill the insert window.
+
+        Args:
+            query: Search phrase (a keyword/concept from the transcript).
+            index: Insert index — used only for the output filename.
+            orientation: "landscape" | "portrait" | "square".
+            used_video_ids: Set of Pexels video ids already used this job;
+                updated in place with the id that gets picked.
+
+        Returns:
+            {"path": str, "duration": float, "video_id": int} or None.
+        """
+        used_video_ids = used_video_ids if used_video_ids is not None else set()
+
+        # Progressively broaden the query if the specific phrase finds nothing.
+        words = query.split()
+        queries = [query]
+        if len(words) > 3:
+            queries.append(" ".join(words[:3]))
+        if len(words) > 1:
+            queries.append(words[0])
+
+        for q in queries:
+            if not q.strip():
+                continue
+            try:
+                videos = self.search_video(q, orientation=orientation)
+            except Exception as e:
+                print(f"[StockFootage] B-roll search failed for '{q}': {e}")
+                continue
+
+            # Prefer a video we haven't used yet in this job.
+            ordered = [v for v in videos if v.get("id") not in used_video_ids] + [
+                v for v in videos if v.get("id") in used_video_ids
+            ]
+            for video in ordered:
+                best = self._pick_best_video([video])
+                if not best:
+                    continue
+                path = os.path.join(output_dir, f"{job_id}_broll_{index}.mp4")
+                try:
+                    self.download_video(best["link"], path)
+                except Exception as e:
+                    print(f"[StockFootage] B-roll download failed for '{q}': {e}")
+                    continue
+                used_video_ids.add(video.get("id"))
+                return {
+                    "path": path,
+                    "duration": float(video.get("duration", 0) or 0),
+                    "video_id": video.get("id"),
+                }
+
         return None

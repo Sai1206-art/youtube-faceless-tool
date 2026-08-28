@@ -122,6 +122,35 @@
         <h1>🎬 Faceless Tech Video Generator</h1>
         <p class="subtitle">Upload product photos + prompt → get a YouTube-ready faceless video</p>
 
+        <!-- ─── B-roll Integration ─────────────────────────── -->
+        <div class="card" style="border-color:#a855f7;">
+            <h3 style="margin-bottom:6px;">✨ Add B-roll to an existing video</h3>
+            <p class="subtitle" style="margin-bottom:18px;">
+                Upload a talking-head / base video. We transcribe it, find relevant
+                Pexels B-roll, and roll it over the speaker at maximum relevant spots.
+            </p>
+
+            <div style="margin-bottom:20px;">
+                <label>Base Video <span class="req">*</span></label>
+                <input type="file" id="broll-video" accept="video/*">
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label>Extra Context (optional)</label>
+                <textarea id="broll-context" placeholder="e.g. tech topic, energetic tone, prefer city / office / nature visuals" style="min-height:60px;"></textarea>
+            </div>
+
+            <button class="btn" id="broll-btn" onclick="addBroll()">Add B-roll</button>
+
+            <div id="broll-progress-section" style="display:none; margin-top:24px;">
+                <h4 style="margin-bottom:12px;">B-roll Progress</h4>
+                <div id="broll-progress-steps"></div>
+                <div id="broll-meta" style="margin-top:12px; color:#a0a0c0; font-size:0.9rem;"></div>
+            </div>
+
+            <div id="broll-result" style="display:none; margin-top:20px;"></div>
+        </div>
+
         <!-- Input Form -->
         <div class="card">
             <div style="margin-bottom: 20px;">
@@ -406,6 +435,99 @@
                 </details>`;
             }
             content.innerHTML = html;
+        }
+
+        // ─── B-roll Integration ─────────────────────────────
+        async function addBroll() {
+            const fileEl = document.getElementById('broll-video');
+            const file = fileEl.files[0];
+            if (!file) { alert('Please choose a base video'); return; }
+
+            const btn = document.getElementById('broll-btn');
+            btn.disabled = true;
+            btn.textContent = 'Processing...';
+
+            const formData = new FormData();
+            formData.append('base_video', file);
+            formData.append('extra_context', document.getElementById('broll-context').value);
+
+            const steps = [
+                { name: 'Probe video', key: 'probe' },
+                { name: 'Transcribe speech (Whisper)', key: 'transcription' },
+                { name: 'Plan B-roll (GPT-4o)', key: 'planning' },
+                { name: 'Fetch B-roll (Pexels)', key: 'fetch_broll' },
+                { name: 'Compose overlay (FFmpeg)', key: 'composition' },
+            ];
+
+            document.getElementById('broll-progress-section').style.display = 'block';
+            document.getElementById('broll-result').style.display = 'none';
+            document.getElementById('broll-progress-steps').innerHTML = steps.map(s =>
+                `<div class="progress-step" id="bstep-${s.key}">
+                    <div class="step-icon" id="bicon-${s.key}">○</div>
+                    <div>
+                        <div class="step-name">${s.name}</div>
+                        <div class="step-status" id="bstatus-${s.key}">Pending</div>
+                    </div>
+                </div>`
+            ).join('');
+
+            try {
+                const response = await fetch('/api/broll', { method: 'POST', body: formData });
+                const initData = await response.json();
+                if (!initData.job_id) {
+                    alert('Failed to start: ' + (initData.error || 'Unknown error'));
+                    btn.disabled = false; btn.textContent = 'Add B-roll';
+                    return;
+                }
+                const jobId = initData.job_id;
+
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const res = await fetch(`/api/status/${jobId}`);
+                        if (!res.ok) return;
+                        const data = await res.json();
+
+                        steps.forEach(s => {
+                            const icon = document.getElementById(`bicon-${s.key}`);
+                            const status = document.getElementById(`bstatus-${s.key}`);
+                            if (data.steps_completed && data.steps_completed.includes(s.key)) {
+                                icon.className = 'step-icon done'; icon.textContent = '✓'; status.textContent = 'Complete';
+                            } else if (data.current_step === s.key) {
+                                icon.className = 'step-icon active'; icon.textContent = '●'; status.textContent = 'In Progress...';
+                            } else {
+                                icon.className = 'step-icon'; icon.textContent = '○'; status.textContent = 'Pending';
+                            }
+                        });
+
+                        const meta = document.getElementById('broll-meta');
+                        const bits = [];
+                        if (data.video_info) bits.push(`${data.video_info.width}×${data.video_info.height}, ${Math.round(data.video_info.duration)}s`);
+                        if (typeof data.transcript_segments === 'number') bits.push(`${data.transcript_segments} speech segments`);
+                        if (Array.isArray(data.plan)) bits.push(`${data.plan.length} B-roll inserts planned`);
+                        if (typeof data.coverage_percent === 'number') bits.push(`~${data.coverage_percent}% coverage`);
+                        if (typeof data.inserts_fetched === 'number') bits.push(`${data.inserts_fetched} clips fetched`);
+                        meta.textContent = bits.join('  •  ');
+
+                        if (data.status === 'completed') {
+                            clearInterval(pollInterval);
+                            const r = document.getElementById('broll-result');
+                            r.style.display = 'block';
+                            r.innerHTML = `<div class="card result-card" style="display:block;">
+                                <h3 style="margin-bottom:12px;">✅ B-roll added!</h3>
+                                <a href="${data.download_url}" target="_blank" class="result-link">⬇ Download MP4</a>
+                            </div>`;
+                            btn.disabled = false; btn.textContent = 'Add B-roll';
+                        } else if (data.status === 'error') {
+                            clearInterval(pollInterval);
+                            alert('B-roll failed: ' + (data.error || 'Unknown error'));
+                            btn.disabled = false; btn.textContent = 'Add B-roll';
+                        }
+                    } catch (e) { console.error('poll error', e); }
+                }, 2000);
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+                btn.disabled = false; btn.textContent = 'Add B-roll';
+            }
         }
     </script>
 </body>
