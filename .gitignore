@@ -1,5 +1,7 @@
 # Environment
 .env
+.env.*
+!.env.example
 google-credentials.json
 youtube-oauth-client.json
 

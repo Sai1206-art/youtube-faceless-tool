@@ -87,6 +87,58 @@ Open http://localhost:8000
 5. Video is uploaded to Drive + YouTube (private)
 6. Review on YouTube Studio, then publish when ready
 
+## ytlane — fastlane-style CLI
+
+`ytlane` lets you run the pipeline from the terminal as **lanes** (named workflows) built from reusable **actions**, the same way [fastlane](https://fastlane.tools) does for app releases. Lanes live in `Lanefile.py` (this project's Fastfile).
+
+```bash
+python -m ytlane                         # list lanes
+python -m ytlane actions                 # list actions
+python -m ytlane draft prompt:"Top 3 budget earbuds" images:photos/ affiliate:https://amzn.to/x
+python -m ytlane draft prompt:"..." images:photos/ --dry-run   # print the steps, call no APIs
+```
+
+Arguments use fastlane's `key:value` style. `images:` accepts a folder, a glob, or a comma-separated list.
+
+**Built-in lanes** (edit `Lanefile.py` to change them):
+
+| Lane | What it does |
+|------|--------------|
+| `draft` | script → voiceover → B-roll → video → YouTube (private). Add `drive:true` to upload to Drive too, or `privacy:unlisted` |
+| `script` | Only calls the LLM and saves `script.json`, so you can review it before paying for TTS |
+| `render` | Renders a saved script (`script:path/to/script.json`) without uploading |
+| `release` | `render` + upload a script you've reviewed |
+
+**Review workflow:** `script` → edit the JSON → `render` → `release`.
+
+**Metadata (like `deliver`):** put `title.txt`, `description.txt` or `tags.txt` in `metadata/` and they replace what the LLM wrote.
+
+**Flags:**
+- `--env NAME` loads `.env.NAME` first, so you can keep one config per channel.
+- `--dry-run` skips every action.
+- `--job-id ID` names the job.
+- `--lanefile PATH` uses a different Lanefile.
+
+**Hooks:** `@before_all`, `@after_all`, `@error`. The default `@error` hook calls `notify`, which posts to `YTLANE_WEBHOOK_URL` (Slack or Discord) when that variable is set.
+
+**Custom actions** (fastlane's plugins) are defined in your Lanefile:
+
+```python
+from ytlane import action, lane
+
+@action(output="thumbnail")
+def make_thumbnail(ctx, text):
+    ...  # ctx["script"], ctx["video_path"] etc. hold earlier outputs
+    return "thumb.png"
+
+@lane
+def shorts(ctx, options):
+    ctx.generate_script(prompt=options["prompt"], images=options["images"])
+    ctx.make_thumbnail(text=ctx["script"]["title"])
+```
+
+Run a single action on its own: `python -m ytlane run notify message:hi`. Run the tests with `python -m pytest tests`.
+
 ## Tech Stack
 
 - **Backend:** Python, FastAPI
